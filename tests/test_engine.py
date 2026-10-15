@@ -3,6 +3,28 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from engine import *
 class EngineTests(unittest.TestCase):
+ def test_apriltag_board_is_detectable_and_persists(self):
+  obj=Object3D('Test board',board_mesh(500,500),'target',marker_size_mm=40,display_color='#a0a0a0',opacity=.35)
+  image=board_texture_image(obj)
+  detector=cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11))
+  corners,ids,_=detector.detectMarkers(image)
+  self.assertEqual(len(ids),64)
+  self.assertEqual(len(np.unique(ids)),64)
+  with tempfile.TemporaryDirectory() as directory:
+   path=Path(directory)/'tags.mcv';save_session(path,[obj],[self.cam()]);objects,_=load_session(path)
+   self.assertEqual(objects[0].marker_size_mm,40)
+   self.assertEqual(objects[0].opacity,.35)
+   self.assertEqual(objects[0].display_color,'#a0a0a0')
+   np.testing.assert_array_equal(board_texture_image(objects[0]),image)
+ def test_apriltag_camera_render_changes_pattern_without_changing_coverage(self):
+  obj=Object3D('Test board',board_mesh(10,10),'target',marker_size_mm=2)
+  result=render_camera([obj],self.cam(),100)
+  colors=np.unique(result['image'].reshape(-1,3),axis=0)
+  self.assertTrue((colors==0).all(axis=1).any())
+  self.assertTrue((colors>200).all(axis=1).any())
+  before,_,_=evaluate([obj],[self.cam()],1000);obj.marker_size_mm=3
+  after,_,_=evaluate([obj],[self.cam()],1000)
+  self.assertEqual(before['covered_mm2'],after['covered_mm2'])
  def test_combined_coverage_and_pair_overlap(self):
   a=self.cam();b=self.cam();b.name='second';b.center[0]=5
   objects=[Object3D('Test board',board_mesh(10,10),'target')]

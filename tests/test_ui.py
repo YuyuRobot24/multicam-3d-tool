@@ -122,6 +122,25 @@ class UiTests(unittest.TestCase):
   self.assertEqual(w.revision,revision)
   self.assertIsNone(w.worker)
 
+ def test_board_markers_materials_frustum_and_dedicated_delete(self):
+  w=self.window
+  self.assertEqual(w.frustum_length.value(),150)
+  self.assertEqual(w.objects[0].display_color,'#23a455')
+  self.assertEqual(w.objects[1].marker_size_mm,40)
+  self.assertEqual(w.object_actors[1].prop.opacity,.35)
+  self.assertIsNotNone(w.object_actors[1].texture)
+  position=w.objects[1].position.copy()
+  w.marker_size.setValue(30)
+  self.assertEqual(w.objects[1].marker_size_mm,30)
+  self.assertTrue((w.objects[1].position==position).all())
+  self.assertIsNone(w.worker)
+  w.res.setCurrentText('320');w.suggest_marker_size();self.assertEqual(w.marker_size.value(),40)
+  w.bd.setValue(300);w.suggest_marker_size();self.assertGreater(w.marker_size.value(),40)
+  w.objlist.setCurrentRow(0);w.delete_board_button.click()
+  self.assertEqual(len(w.objects),1)
+  self.assertNotEqual(w.objects[0].name,'Test board')
+  self.assertEqual(w.objects[0].display_color,'#23a455')
+
  def test_mouse_drags_translation_arrow_and_rotation_arc(self):
   import numpy as np
   from PySide6.QtTest import QTest

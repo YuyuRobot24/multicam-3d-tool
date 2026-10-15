@@ -29,6 +29,10 @@ Press **Update images** to render camera images or **Evaluate coverage** to rend
 
 ## Mouse model controls
 
+The background board uses standard AprilTag `36h11` markers on white quiet zones over a gray surface. Default black-border marker side length is 40 mm for the 150 mm test distance; adjust **AprilTag size mm** or press **Suggest marker size for distance**. The suggestion targets roughly 40 preview pixels across a frontal marker using active-camera focal lengths, distance and preview width; oblique views may need larger markers or higher resolution. Marker size is clamped to fit the board. The 500 mm board fits 8×8 differently numbered tags at the default size. Large grids cycle the dictionary's 587 IDs.
+
+The 3D board uses 35% opacity for navigation; simulated camera images keep the board solid and render the same tag pattern for geometric evaluation. Supplied housings and newly imported STEP/STP models are green. **Delete background board** removes the board independently of the current selection. Camera guide length starts at 150 mm and remains adjustable. Marker size, display color and opacity are stored in projects; older board projects acquire these display defaults when loaded.
+
 The default test distance is 150 mm from the tip reference, with a 500 × 500 mm test board. Transform handles use a fixed world-space size independent of model bounds, rotation or scale. Adjust **Handle size mm** in the Interaction tab (default 25) to control arrow and arc size without changing model dimensions or triggering computation.
 
 Click a model in the 3D viewport to select it and open the **Interaction** tab. Selection shows a colored transform manipulator on the model. Drag a straight arrow to translate along its world axis; drag a curved arc to rotate about that axis around the model center. Red represents X / Roll, green Y / Pitch, and blue Z / Yaw.

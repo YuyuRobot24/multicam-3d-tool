@@ -82,6 +82,9 @@ class MainWindow(W.QMainWindow):
   ml.addWidget(W.QLabel(t('Test board (local XY plane)')))
   f=W.QFormLayout();self.bw=self.number(500,1,2000);self.bh=self.number(500,1,2000);self.bd=self.number(150,.1,2000);self.tipx=self.number(-157);f.addRow(t('Tip reference X mm'),self.tipx);f.addRow(t('Width mm'),self.bw);f.addRow(t('Height mm'),self.bh);f.addRow(t('Distance from tip -X mm'),self.bd);ml.addLayout(f)
   self.button(ml,t('Create / Reset board'),self.make_board)
+  marker_form=W.QFormLayout();self.marker_size=self.number(40,1,300,1);marker_form.addRow(t('AprilTag size mm'),self.marker_size);ml.addLayout(marker_form);self.marker_size.valueChanged.connect(self.update_board_markers)
+  self.button(ml,t('Suggest marker size for distance'),self.suggest_marker_size)
+  self.delete_board_button=self.button(ml,t('Delete background board'),self.delete_board)
   self.button(ml,t('Load curved demo'),self.demo_surface)
   ml.addWidget(W.QLabel(t('Set imported teeth/head to target; disable the board if needed. All target surfaces count, including the back.')))
   ml.addStretch()
@@ -96,7 +99,7 @@ class MainWindow(W.QMainWindow):
   row=W.QHBoxLayout();self.button(row,t('Import calibration'),lambda:self.import_intrinsics(False));self.button(row,t('Apply to all'),lambda:self.import_intrinsics(True));cl.addLayout(row)
   cl.addWidget(W.QLabel(t('JSON / YAML / OpenCV YAML / Markdown report. The 3D view is a guide; ray images use full calibration.')));cl.addStretch()
   run=W.QGroupBox(t('Compute'));rl=W.QVBoxLayout(run);lv.addWidget(run)
-  f=W.QFormLayout();self.res=W.QComboBox();self.res.addItems(['160','320','640','1280']);self.res.setCurrentText('320');self.samples=W.QComboBox();self.samples.addItems(['2000','10000','50000']);self.samples.setCurrentText('10000');f.addRow(t('Image width px'),self.res);f.addRow(t('Area samples'),self.samples);self.frustum_length=self.number(50,1,2000);self.frustum_length.valueChanged.connect(lambda _:self.draw());f.addRow(t('Camera guide length mm'),self.frustum_length);rl.addLayout(f)
+  f=W.QFormLayout();self.res=W.QComboBox();self.res.addItems(['160','320','640','1280']);self.res.setCurrentText('320');self.samples=W.QComboBox();self.samples.addItems(['2000','10000','50000']);self.samples.setCurrentText('10000');f.addRow(t('Image width px'),self.res);f.addRow(t('Area samples'),self.samples);self.frustum_length=self.number(150,1,2000);self.frustum_length.valueChanged.connect(lambda _:self.draw());f.addRow(t('Camera guide length mm'),self.frustum_length);rl.addLayout(f)
   row=W.QHBoxLayout();self.preview_button=self.button(row,t('Update images'),lambda:self.compute(False));self.eval_button=self.button(row,t('Evaluate coverage'),lambda:self.compute(True));rl.addLayout(row)
   row=W.QHBoxLayout();self.button(row,t('Save project'),self.save_project);self.button(row,t('Open project'),self.open_project);self.export_button=self.button(row,t('Export results'),self.export_results);rl.addLayout(row);self.export_button.setEnabled(False)
   self.status=W.QLabel(t('Ready'));self.status.setWordWrap(True);lv.addWidget(self.status)
@@ -179,14 +182,17 @@ class MainWindow(W.QMainWindow):
   self.objlist.setCurrentRow(max(0,min(oi,len(self.objects)-1)));self.camlist.setCurrentRow(max(0,min(ci,len(self.cameras)-1)))
  def load_example(self):
   try:
-   i=self.preset.currentIndex()+1;p=ROOT/'examples';cfg=json.loads((p/'configs'/f'layout_{i:02}.json').read_text());self.objects=[Object3D(f'Layout {i:02}',import_mesh(p/'models'/f'layout_{i:02}.npz'))];self.cameras=[Camera(c['id'],np.array(c['center_world_mm']),np.array(c['R_world_from_camera']),validate_calibration(c.get('intrinsics') or DEFAULT_K)) for c in cfg['cameras']];self.make_board();self.refresh_lists();self.changed();self.draw(True)
+   i=self.preset.currentIndex()+1;p=ROOT/'examples';cfg=json.loads((p/'configs'/f'layout_{i:02}.json').read_text());self.objects=[Object3D(f'Layout {i:02}',import_mesh(p/'models'/f'layout_{i:02}.npz'),display_color='#23a455')];self.cameras=[Camera(c['id'],np.array(c['center_world_mm']),np.array(c['R_world_from_camera']),validate_calibration(c.get('intrinsics') or DEFAULT_K)) for c in cfg['cameras']];self.make_board();self.refresh_lists();self.changed();self.draw(True)
   except Exception as e:self.error(e)
  def draw(self,reset=False):
   self.clear_gizmo();self.object_actors={}
   old=self.viewer.camera_position;self.viewer.clear();self.viewer.add_axes();self.viewer.add_text(f'mm | Camera guides: {self.frustum_length.value():g} mm',font_size=10,color='#233c4d',name='hint')
   for i,o in enumerate(self.objects):
    if not o.enabled:continue
-   m=o.world_mesh();poly=pv.PolyData(m.vertices,np.column_stack([np.full(len(m.faces),3),m.faces]).ravel());col={'housing':'#9cabb9','target':'#e3b05d','occluder':'#796f87'}[o.role];self.object_actors[i]=self.viewer.add_mesh(poly,color=col,smooth_shading=False,pickable=True,name=f'obj{i}',show_edges=i==self.objlist.currentRow(),edge_color='#f5c542')
+   m=o.world_mesh();poly=pv.PolyData(m.vertices,np.column_stack([np.full(len(m.faces),3),m.faces]).ravel());col=o.display_color or {'housing':'#23a455','target':'#e3b05d','occluder':'#796f87'}[o.role];texture=None
+   if o.name=='Test board':
+    bounds=o.mesh.bounds;poly.active_texture_coordinates=(o.mesh.vertices[:,:2]-bounds[0,:2])/np.maximum(bounds[1,:2]-bounds[0,:2],1e-9);texture=pv.Texture(board_texture_image(o));texture.interpolate=False;col='white'
+   self.object_actors[i]=self.viewer.add_mesh(poly,color=col,texture=texture,opacity=o.opacity,smooth_shading=False,pickable=True,name=f'obj{i}',show_edges=i==self.objlist.currentRow(),edge_color='#f5c542')
   for i,c in enumerate(self.cameras):
    col='#0e938d' if i==self.camlist.currentRow() else '#dd633e';col=col if c.active else '#777777'
    self.viewer.add_mesh(pv.Sphere(radius=.8,center=c.center),color=col,pickable=False)
@@ -204,6 +210,7 @@ class MainWindow(W.QMainWindow):
   i=self.objlist.currentRow()
   if self.updating or not 0<=i<len(self.objects):return
   self.updating=True;o=self.objects[i];self.selected_label.setText(o.name);self.role.setCurrentIndex(self.role.findData(o.role));self.enabled.setChecked(o.enabled);self.scale.setValue(o.scale)
+  if o.name=='Test board' and o.marker_size_mm>0:self.marker_size.setValue(o.marker_size_mm)
   for s,v in zip(self.objfields,np.r_[o.position,o.angles]):s.setValue(float(v))
   self.updating=False;self.draw()
  def object_changed(self,*_):
@@ -261,7 +268,7 @@ class MainWindow(W.QMainWindow):
   p,_=W.QFileDialog.getOpenFileName(self,t('Import housing / teeth / head'),'','3D (*.step *.stp *.stl *.obj *.ply *.glb *.gltf *.npz)')
   if not p:return
   try:
-   W.QApplication.setOverrideCursor(C.Qt.CursorShape.WaitCursor);m=import_mesh(p);self.objects.append(Object3D(Path(p).stem,m,'target'));self.refresh_lists();self.objlist.setCurrentRow(len(self.objects)-1);self.changed();self.draw(True);self.log.append(f'Imported {Path(p).name}: {len(m.faces)} triangles; original bounds {m.extents}. Check unit scaling.')
+   W.QApplication.setOverrideCursor(C.Qt.CursorShape.WaitCursor);m=import_mesh(p);self.objects.append(Object3D(Path(p).stem,m,'target',display_color='#23a455' if Path(p).suffix.lower() in ('.step','.stp') else None));self.refresh_lists();self.objlist.setCurrentRow(len(self.objects)-1);self.changed();self.draw(True);self.log.append(f'Imported {Path(p).name}: {len(m.faces)} triangles; original bounds {m.extents}. Check unit scaling.')
   except Exception as e:self.error(e)
   finally:W.QApplication.restoreOverrideCursor()
  def remove_object(self):
@@ -272,7 +279,19 @@ class MainWindow(W.QMainWindow):
   if i<0:return
   o=self.objects[i];R=Rotation.from_euler('xyz',o.angles,degrees=True).as_matrix();o.position=np.array([self.tipx.value()-self.bd.value(),0,0])-R@(o.mesh.centroid*o.scale);self.object_selected();self.changed();self.draw(True)
  def make_board(self):
-  self.objects=[o for o in self.objects if o.name!='Test board'];self.objects.append(Object3D('Test board',board_mesh(self.bw.value(),self.bh.value()),'target',np.array([self.tipx.value()-self.bd.value(),0.,0.]),np.array([90.,0.,90.])));self.refresh_lists();self.objlist.setCurrentRow(len(self.objects)-1);self.changed()
+  self.objects=[o for o in self.objects if o.name!='Test board'];self.objects.append(Object3D('Test board',board_mesh(self.bw.value(),self.bh.value()),'target',np.array([self.tipx.value()-self.bd.value(),0.,0.]),np.array([90.,0.,90.]),marker_size_mm=min(self.marker_size.value(),min(self.bw.value(),self.bh.value())/1.5),display_color='#a0a0a0',opacity=.35));self.refresh_lists();self.objlist.setCurrentRow(len(self.objects)-1);self.changed()
+ def update_board_markers(self,*_):
+  if self.updating:return
+  for obj in self.objects:
+   if obj.name=='Test board':obj.marker_size_mm=min(self.marker_size.value(),min(obj.mesh.extents[:2])/1.5)
+  self.changed()
+ def suggest_marker_size(self):
+  # Aim for about 40 preview pixels across a frontal marker's black border.
+  fx=np.median([c.intrinsics['K'][0][0]*int(self.res.currentText())/c.intrinsics['image_size'][0] for c in self.cameras if c.active]) if any(c.active for c in self.cameras) else 167.
+  size=np.ceil(self.bd.value()*40/max(fx,1)/5)*5
+  self.marker_size.setValue(float(np.clip(size,1,min(300,self.bw.value()/1.5,self.bh.value()/1.5))))
+ def delete_board(self):
+  self.objects=[obj for obj in self.objects if obj.name!='Test board'];self.refresh_lists();self.changed();self.show_camera_grid([])
  def demo_surface(self):
   for o in self.objects:
    if o.name=='Test board':o.enabled=False

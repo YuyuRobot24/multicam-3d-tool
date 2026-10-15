@@ -2,6 +2,7 @@
 from dataclasses import dataclass,field
 from pathlib import Path
 import io,json,zipfile,re
+from functools import lru_cache
 import numpy as np
 import cv2,trimesh,yaml
 from scipy.spatial.transform import Rotation
@@ -86,6 +87,9 @@ class Object3D:
  angles:np.ndarray=field(default_factory=lambda:np.zeros(3))
  scale:float=1.
  enabled:bool=True
+ marker_size_mm:float=0.
+ display_color:str|None=None
+ opacity:float=1.
  def world_mesh(self):
   m=self.mesh.copy();m.apply_scale(self.scale);T=np.eye(4);T[:3,:3]=Rotation.from_euler('xyz',self.angles,degrees=True).as_matrix();T[:3,3]=self.position;m.apply_transform(T);return m
 
@@ -111,6 +115,36 @@ def import_mesh(path):
 def board_mesh(width,height):
  # Local XY plane, normal +Z; role=target. Native dimensions in mm.
  return trimesh.Trimesh([[-width/2,-height/2,0],[width/2,-height/2,0],[width/2,height/2,0],[-width/2,height/2,0]],[[0,1,2],[0,2,3]],process=False)
+
+@lru_cache(maxsize=587)
+def april_tag_bits(tag_id):
+ dictionary=cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
+ return cv2.aruco.generateImageMarker(dictionary,tag_id,8)
+
+def board_colors(obj,xy):
+ """Gray board with unique AprilTag 36h11 tiles and white quiet zones."""
+ xy=np.asarray(xy);colors=np.full((len(xy),3),160,dtype=np.uint8)
+ size=obj.marker_size_mm
+ if size<=0:return colors
+ width,height=obj.mesh.extents[:2];pitch=size*1.5;nx,ny=int(width//pitch),int(height//pitch)
+ if nx<1 or ny<1:return colors
+ local=xy+np.array([nx*pitch/2,ny*pitch/2]);ij=np.floor(local/pitch).astype(int)
+ inside=(ij[:,0]>=0)&(ij[:,0]<nx)&(ij[:,1]>=0)&(ij[:,1]<ny)
+ colors[inside]=245
+ cell=local-ij*pitch-size*.25
+ marked=inside&(cell[:,0]>=0)&(cell[:,0]<size)&(cell[:,1]>=0)&(cell[:,1]<size)
+ ids=np.flatnonzero(marked);tag_ids=(ij[ids,1]*nx+ij[ids,0])%587
+ bit=np.clip((cell[ids]/size*8).astype(int),0,7)
+ for tag_id in np.unique(tag_ids):
+  selected=tag_ids==tag_id;values=april_tag_bits(int(tag_id))[7-bit[selected,1],bit[selected,0]]
+  colors[ids[selected]]=values[:,None]
+ return colors
+
+def board_texture_image(obj,resolution=1024):
+ width,height=obj.mesh.extents[:2];w=resolution;h=max(1,round(resolution*height/width))
+ x=(np.arange(w)+.5)/w*width-width/2;y=height/2-(np.arange(h)+.5)/h*height
+ X,Y=np.meshgrid(x,y)
+ return board_colors(obj,np.column_stack([X.ravel(),Y.ravel()])).reshape(h,w,3)
 
 def build_scene(objects):
  meshes=[];owner=[];offset=0
@@ -191,9 +225,11 @@ def render_camera(objects,camera,width=320,prepared=None,rectified=False):
   n=mesh.face_normals[faces];shade=.35+.65*np.abs((n*(-world[pixels])).sum(1));col=np.asarray(mesh.visual.face_colors)[faces,:3].astype(float)
   for oi,obj in enumerate(objects):
    k=which==oi
+   color=obj.display_color or ('#23a455' if obj.role=='housing' else None)
+   if color and k.any():col[k]=np.array(list(bytes.fromhex(color.lstrip('#'))))
    if obj.name=='Test board' and k.any():
-    points=camera.center+world[pixels[k]]*depth[pixels[k],None];R=Rotation.from_euler('xyz',obj.angles,degrees=True).as_matrix();local=(points-obj.position)@R/obj.scale;tile=(np.floor(local[:,0]/5)+np.floor(local[:,1]/5)).astype(int)%2
-    col[k]=np.where(tile[:,None]==0,[230,235,239],[62,81,102])
+    points=camera.center+world[pixels[k]]*depth[pixels[k],None];R=Rotation.from_euler('xyz',obj.angles,degrees=True).as_matrix();local=(points-obj.position)@R/obj.scale
+    col[k]=board_colors(obj,local[:,:2])
   rgb[pixels]=np.clip(col*shade[:,None],0,255).astype('uint8')
  target_ids=[i for i,o in enumerate(objects) if o.enabled and o.role=='target'];mask=np.isin(object_ids,target_ids)&(object_ids>=0)
  if camera.image_mask is not None:
@@ -252,7 +288,7 @@ def save_session(path,objects,cameras):
   for i,c in enumerate(cameras):
    if c.image_mask is not None:z.writestr(f'camera_mask_{i}.png',cv2.imencode('.png',c.image_mask.astype('uint8'))[1].tobytes())
   for i,o in enumerate(objects):
-   b=io.BytesIO();np.savez_compressed(b,vertices=o.mesh.vertices,faces=o.mesh.faces,face_colors=o.mesh.visual.face_colors);z.writestr(f'mesh_{i}.npz',b.getvalue());data['objects'].append({'name':o.name,'role':o.role,'position':o.position.tolist(),'angles':o.angles.tolist(),'scale':o.scale,'enabled':o.enabled})
+   b=io.BytesIO();np.savez_compressed(b,vertices=o.mesh.vertices,faces=o.mesh.faces,face_colors=o.mesh.visual.face_colors);z.writestr(f'mesh_{i}.npz',b.getvalue());data['objects'].append({'name':o.name,'role':o.role,'position':o.position.tolist(),'angles':o.angles.tolist(),'scale':o.scale,'enabled':o.enabled,'marker_size_mm':o.marker_size_mm,'display_color':o.display_color,'opacity':o.opacity})
   z.writestr('session.json',json.dumps(data))
 
 def load_session(path):
@@ -261,7 +297,9 @@ def load_session(path):
   if d.get('schema')!=1 or d.get('units')!='mm':raise ValueError('Unsupported session')
   objects=[]
   for i,o in enumerate(d['objects']):
-   m=np.load(io.BytesIO(z.read(f'mesh_{i}.npz')));mesh=trimesh.Trimesh(m['vertices'],m['faces'],face_colors=m['face_colors'],process=False);objects.append(Object3D(o['name'],mesh,o['role'],np.array(o['position']),np.array(o['angles']),o['scale'],o['enabled']))
+   m=np.load(io.BytesIO(z.read(f'mesh_{i}.npz')));mesh=trimesh.Trimesh(m['vertices'],m['faces'],face_colors=m['face_colors'],process=False)
+   board=o['name']=='Test board'
+   objects.append(Object3D(o['name'],mesh,o['role'],np.array(o['position']),np.array(o['angles']),o['scale'],o['enabled'],o.get('marker_size_mm',min(40,float(min(mesh.extents[:2]))/1.5) if board else 0.),o.get('display_color','#a0a0a0' if board else None),o.get('opacity',.35 if board else 1.)))
   cameras=[Camera.from_dict(c) for c in d['cameras']]
   for i,c in enumerate(cameras):
    name=f'camera_mask_{i}.png'

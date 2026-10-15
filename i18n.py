@@ -3,6 +3,8 @@ from PySide6 import QtWidgets as W
 
 LANGUAGE = 'en'
 ZH = {
+ 'Suggest marker size for distance':'按测试距离推荐标记大小',
+ 'AprilTag size mm':'AprilTag 标记边长 mm','Delete background board':'删除背景板',
  'Handle size mm':'操纵器大小 mm',
  'Interaction':'交互','Object interaction':'物体移动与旋转',
  'Roll (X)':'Roll 横滚 (X)','Pitch (Y)':'Pitch 俯仰 (Y)','Yaw (Z)':'Yaw 偏航 (Z)',
