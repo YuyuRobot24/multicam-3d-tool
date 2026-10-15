@@ -1,0 +1,166 @@
+{
+  "images": [
+    {
+      "valid_pixels_fraction": 0.9614930555555555,
+      "target_image_fraction": 0.38477430555555553,
+      "target_bbox_preview_pixels": [
+        88,
+        41,
+        250,
+        180
+      ],
+      "preview_size": [
+        320,
+        180
+      ]
+    },
+    {
+      "valid_pixels_fraction": 0.9614930555555555,
+      "target_image_fraction": 0.38621527777777775,
+      "target_bbox_preview_pixels": [
+        71,
+        41,
+        234,
+        180
+      ],
+      "preview_size": [
+        320,
+        180
+      ]
+    },
+    {
+      "valid_pixels_fraction": 0.9614930555555555,
+      "target_image_fraction": 0.31137152777777777,
+      "target_bbox_preview_pixels": [
+        115,
+        12,
+        250,
+        147
+      ],
+      "preview_size": [
+        320,
+        180
+      ]
+    },
+    {
+      "valid_pixels_fraction": 0.9614930555555555,
+      "target_image_fraction": 0.31439236111111113,
+      "target_bbox_preview_pixels": [
+        71,
+        12,
+        207,
+        147
+      ],
+      "preview_size": [
+        320,
+        180
+      ]
+    }
+  ],
+  "surface": {
+    "target_area_mm2": 2500.0,
+    "sample_count": 10000,
+    "covered_mm2": 2500.0,
+    "overlap2_mm2": 2500.0,
+    "blind_mm2": 0.0,
+    "per_camera": [
+      {
+        "name": "cam_1",
+        "visible_area_mm2": 2147.5,
+        "world_bbox_extent_mm": [
+          8.526512829121202e-14,
+          49.99126041146634,
+          43.482057297491956
+        ],
+        "board_visible_width_mm": 49.99126041146634,
+        "board_visible_height_mm": 43.482057297491956
+      },
+      {
+        "name": "cam_2",
+        "visible_area_mm2": 2148.25,
+        "world_bbox_extent_mm": [
+          8.526512829121202e-14,
+          49.99126041146634,
+          43.42375216509005
+        ],
+        "board_visible_width_mm": 49.99126041146634,
+        "board_visible_height_mm": 43.42375216509005
+      },
+      {
+        "name": "cam_3",
+        "visible_area_mm2": 2500.0,
+        "world_bbox_extent_mm": [
+          8.526512829121202e-14,
+          49.99710046528321,
+          49.999415195391435
+        ],
+        "board_visible_width_mm": 49.99710046528321,
+        "board_visible_height_mm": 49.999415195391435
+      },
+      {
+        "name": "cam_4",
+        "visible_area_mm2": 2500.0,
+        "world_bbox_extent_mm": [
+          8.526512829121202e-14,
+          49.99710046528321,
+          49.999415195391435
+        ],
+        "board_visible_width_mm": 49.99710046528321,
+        "board_visible_height_mm": 49.999415195391435
+      }
+    ],
+    "pairs": [
+      {
+        "cameras": [
+          "cam_1",
+          "cam_2"
+        ],
+        "intersection_mm2": 2143.25,
+        "IoU": 0.9957026713124274
+      },
+      {
+        "cameras": [
+          "cam_1",
+          "cam_3"
+        ],
+        "intersection_mm2": 2147.5,
+        "IoU": 0.859
+      },
+      {
+        "cameras": [
+          "cam_1",
+          "cam_4"
+        ],
+        "intersection_mm2": 2147.5,
+        "IoU": 0.859
+      },
+      {
+        "cameras": [
+          "cam_2",
+          "cam_3"
+        ],
+        "intersection_mm2": 2148.25,
+        "IoU": 0.8593
+      },
+      {
+        "cameras": [
+          "cam_2",
+          "cam_4"
+        ],
+        "intersection_mm2": 2148.25,
+        "IoU": 0.8593
+      },
+      {
+        "cameras": [
+          "cam_3",
+          "cam_4"
+        ],
+        "intersection_mm2": 2500.0,
+        "IoU": 1.0
+      }
+    ],
+    "coverage_fraction": 1.0,
+    "overlap2_fraction": 1.0
+  },
+  "elapsed_s": 23.786054611206055
+}

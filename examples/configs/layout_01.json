@@ -1,0 +1,225 @@
+{
+  "layout": "layout_01",
+  "mesh": "models/layout_01.npz",
+  "units": "mm",
+  "reference_tip_mm": [
+    -157,
+    0,
+    0
+  ],
+  "cameras": [
+    {
+      "id": "cam_1",
+      "opening_center_mm": [
+        -157.00000000000003,
+        -1.7975039446312058e-15,
+        9.600000000000001
+      ],
+      "center_world_mm": [
+        -157.00000000000003,
+        -1.7975039446312058e-15,
+        9.600000000000001
+      ],
+      "R_world_from_camera": [
+        [
+          0,
+          0,
+          -1
+        ],
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0
+        ]
+      ],
+      "pose_confirmed": false,
+      "intrinsics": {
+        "model": "opencv",
+        "image_size": [
+          1280,
+          720
+        ],
+        "K": [
+          [
+            669.2158698562481,
+            0,
+            645.1734423597007
+          ],
+          [
+            0,
+            666.8886843050188,
+            365.79785450569784
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        "D": [
+          -0.12640186015194008,
+          0.023595665378689623,
+          0.004526243693052268,
+          -0.004680181702598942,
+          -0.020890876265018954
+        ],
+        "source": "User left calibration; user confirms same camera model across all channels. Shared intrinsics assumed; per-unit differences unmeasured.",
+        "report_metadata": {
+          "side": "left",
+          "timestamp": "2026-08-26T11:06:17",
+          "samples_used": 39,
+          "rms_px": 0.9695511400758433,
+          "board_square_mm": 10.0
+        }
+      },
+      "pose_note": "User confirms front mounting. Approximation: optical center at opening center. Optical axis -X; sensor right +Y/down -Z assumed, sensor roll unconfirmed."
+    },
+    {
+      "id": "cam_2",
+      "opening_center_mm": [
+        -147.00000000000003,
+        -8.313843876330592,
+        -4.800000000000039
+      ],
+      "center_world_mm": [
+        -147.00000000000003,
+        -8.313843876330592,
+        -4.800000000000039
+      ],
+      "R_world_from_camera": [
+        [
+          0,
+          0,
+          -1
+        ],
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0
+        ]
+      ],
+      "pose_confirmed": false,
+      "intrinsics": {
+        "model": "opencv",
+        "image_size": [
+          1280,
+          720
+        ],
+        "K": [
+          [
+            669.2158698562481,
+            0,
+            645.1734423597007
+          ],
+          [
+            0,
+            666.8886843050188,
+            365.79785450569784
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        "D": [
+          -0.12640186015194008,
+          0.023595665378689623,
+          0.004526243693052268,
+          -0.004680181702598942,
+          -0.020890876265018954
+        ],
+        "source": "User left calibration; user confirms same camera model across all channels. Shared intrinsics assumed; per-unit differences unmeasured.",
+        "report_metadata": {
+          "side": "left",
+          "timestamp": "2026-08-26T11:06:17",
+          "samples_used": 39,
+          "rms_px": 0.9695511400758433,
+          "board_square_mm": 10.0
+        }
+      },
+      "pose_note": "User confirms front mounting. Approximation: optical center at opening center. Optical axis -X; sensor right +Y/down -Z assumed, sensor roll unconfirmed."
+    },
+    {
+      "id": "cam_3",
+      "opening_center_mm": [
+        -147.00000000000003,
+        8.31384387633059,
+        -4.800000000000039
+      ],
+      "center_world_mm": [
+        -147.00000000000003,
+        8.31384387633059,
+        -4.800000000000039
+      ],
+      "R_world_from_camera": [
+        [
+          0,
+          0,
+          -1
+        ],
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0
+        ]
+      ],
+      "pose_confirmed": false,
+      "intrinsics": {
+        "model": "opencv",
+        "image_size": [
+          1280,
+          720
+        ],
+        "K": [
+          [
+            669.2158698562481,
+            0,
+            645.1734423597007
+          ],
+          [
+            0,
+            666.8886843050188,
+            365.79785450569784
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        "D": [
+          -0.12640186015194008,
+          0.023595665378689623,
+          0.004526243693052268,
+          -0.004680181702598942,
+          -0.020890876265018954
+        ],
+        "source": "User left calibration; user confirms same camera model across all channels. Shared intrinsics assumed; per-unit differences unmeasured.",
+        "report_metadata": {
+          "side": "left",
+          "timestamp": "2026-08-26T11:06:17",
+          "samples_used": 39,
+          "rms_px": 0.9695511400758433,
+          "board_square_mm": 10.0
+        }
+      },
+      "pose_note": "User confirms front mounting. Approximation: optical center at opening center. Optical axis -X; sensor right +Y/down -Z assumed, sensor roll unconfirmed."
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "model": "opencv",
+  "image_size": [
+    1280,
+    720
+  ],
+  "K": [
+    [
+      669.2158698562481,
+      0,
+      645.1734423597007
+    ],
+    [
+      0,
+      666.8886843050188,
+      365.79785450569784
+    ],
+    [
+      0,
+      0,
+      1
+    ]
+  ],
+  "D": [
+    -0.12640186015194008,
+    0.023595665378689623,
+    0.004526243693052268,
+    -0.004680181702598942,
+    -0.020890876265018954
+  ],
+  "source": "User left calibration; user confirms same camera model across all channels. Shared intrinsics assumed; per-unit differences unmeasured.",
+  "report_metadata": {
+    "side": "left",
+    "timestamp": "2026-08-26T11:06:17",
+    "samples_used": 39,
+    "rms_px": 0.9695511400758433,
+    "board_square_mm": 10.0
+  }
+}
