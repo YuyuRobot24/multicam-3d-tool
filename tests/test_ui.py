@@ -63,7 +63,9 @@ class UiTests(unittest.TestCase):
   while w.last is None and not deadline.hasExpired():
    self.app.processEvents(C.QEventLoop.ProcessEventsFlag.AllEvents,50)
   self.assertIsNotNone(w.last)
-  self.assertEqual(len(w.last['images']),3)
+  self.assertEqual(len(w.last['images']),4)
+  self.assertEqual(w.camera_grid.count(),4)
+  self.assertTrue(all(r['display_model']=='undistorted_pinhole' for _,r in w.last['images']))
   old=w.last;w.nudge_model(0,1)
   self.assertIsNone(w.last)
   self.assertFalse(w.export_button.isEnabled())
@@ -71,5 +73,15 @@ class UiTests(unittest.TestCase):
   self.assertIsNone(w.last)
   w.live_preview.setChecked(False)
   self.assertFalse(w.live_timer.isActive())
+
+ def test_evaluation_shows_joint_metrics_and_all_six_pairs(self):
+  from engine import evaluate
+  w=self.window;metrics,points,counts=evaluate(w.objects,w.cameras,2000)
+  w.job_revision=w.revision
+  w.computed({'images':[],'metrics':metrics,'points':points,'counts':counts})
+  self.assertEqual(w.table.rowCount(),9)
+  self.assertEqual(w.table.columnCount(),4)
+  self.assertEqual(w.table.item(0,0).text(),'Combined coverage / Target area')
+  self.assertTrue(all('(IoU)' in w.table.item(i,0).text() for i in range(3,9)))
 
 if __name__=='__main__':unittest.main()

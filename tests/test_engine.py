@@ -3,6 +3,27 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from engine import *
 class EngineTests(unittest.TestCase):
+ def test_combined_coverage_and_pair_overlap(self):
+  a=self.cam();b=self.cam();b.name='second';b.center[0]=5
+  objects=[Object3D('Test board',board_mesh(10,10),'target')]
+  metrics,_,_=evaluate(objects,[a,b],10000)
+  self.assertAlmostEqual(metrics['coverage_fraction'],1,places=2)
+  self.assertAlmostEqual(metrics['pairs'][0]['IoU'],.5,delta=.025)
+  self.assertAlmostEqual(metrics['overlap_of_covered_fraction'],.5,delta=.025)
+  self.assertAlmostEqual(metrics['union_board_width_mm'],10,delta=.1)
+  self.assertAlmostEqual(metrics['union_board_height_mm'],10,delta=.1)
+ def test_rectified_identity_and_invalid_borders(self):
+  c=self.cam();objects=[Object3D('Test board',board_mesh(10,10),'target')]
+  raw=render_camera(objects,c,100);fixed=render_camera(objects,c,100,rectified=True)
+  np.testing.assert_array_equal(raw['image'],fixed['image'])
+  np.testing.assert_array_equal(raw['mask'],fixed['mask'])
+  np.testing.assert_allclose(raw['depth_mm'],fixed['depth_mm'],equal_nan=True)
+  c.intrinsics['D']=[.8,0,0,0,0]
+  fixed=render_camera(objects,c,100,rectified=True)
+  self.assertLess(fixed['valid_pixels_fraction'],1)
+  self.assertTrue((fixed['object_ids'][~np.isfinite(fixed['depth_mm'])]==-1).all())
+  self.assertEqual(fixed['display_intrinsics']['D'],[])
+  self.assertEqual(fixed['display_model'],'undistorted_pinhole')
  def cam(self):return Camera('test',np.array([0.,0,10.]),camera_rotation([0,0,-1],up=[0,1,0]),{'model':'opencv','image_size':[100,100],'K':[[100,0,49.5],[0,100,49.5],[0,0,1]],'D':[0,0,0,0,0]})
  def test_planar_area(self):
   objects=[Object3D('plane',board_mesh(10,10),'target')];m,pts,count=evaluate(objects,[self.cam()],4000)

@@ -24,6 +24,12 @@ class LaunchDialog(W.QDialog):
   self.live=W.QCheckBox(t('Enable live camera preview'));self.live.setChecked(True);layout.addWidget(self.live)
   buttons=W.QDialogButtonBox(W.QDialogButtonBox.StandardButton.Ok|W.QDialogButtonBox.StandardButton.Cancel);buttons.button(W.QDialogButtonBox.StandardButton.Ok).setText(t('Start simulator'));buttons.accepted.connect(self.accept);buttons.rejected.connect(self.reject);layout.addWidget(buttons);translate_widgets(self)
 
+class CameraImage(W.QLabel):
+ def __init__(self,array):
+  super().__init__();h,w=array.shape[:2];q=G.QImage(np.ascontiguousarray(array).data,w,h,w*3,G.QImage.Format.Format_RGB888).copy();self.source=G.QPixmap.fromImage(q);self.setMinimumSize(100,70);self.setAlignment(C.Qt.AlignmentFlag.AlignCenter)
+ def resizeEvent(self,event):
+  self.setPixmap(self.source.scaled(self.size(),C.Qt.AspectRatioMode.KeepAspectRatio,C.Qt.TransformationMode.SmoothTransformation));super().resizeEvent(event)
+
 class RoiView(W.QGraphicsView):
  def __init__(self,image):
   super().__init__();self.image=image;self.points=[];self.scene_=W.QGraphicsScene(self);self.setScene(self.scene_);h,w=image.shape[:2];q=G.QImage(np.ascontiguousarray(image).data,w,h,w*3,G.QImage.Format.Format_RGB888).copy();self.scene_.addPixmap(G.QPixmap.fromImage(q));self.poly=None;self.setRenderHint(G.QPainter.RenderHint.Antialiasing)
@@ -55,7 +61,7 @@ class ComputeWorker(C.QThread):
    scene=build_scene(self.objects);images=[]
    for c in self.cameras:
     if self.isInterruptionRequested():return
-    if c.active:self.progress.emit(t('Rendering: ')+c.name);images.append((c.name,render_camera(self.objects,c,self.width,scene)))
+    if c.active:self.progress.emit(t('Rendering: ')+c.name);images.append((c.name,render_camera(self.objects,c,self.width,scene,rectified=True)))
    result={'images':images,'metrics':None}
    if self.area:
     self.progress.emit(t('Calculating coverage, overlap and blind areas...'));result['metrics'],result['points'],result['counts']=evaluate(self.objects,self.cameras,self.samples,scene)
@@ -70,7 +76,7 @@ class MainWindow(W.QMainWindow):
   title=W.QLabel(t('Multicam 3D Workbench'));title.setStyleSheet('font-size:21px;font-weight:600;color:#0f766e');lv.addWidget(title)
   note=W.QLabel(t('Length mm - Angles deg - Area mm2\nCamera: +Z forward, +X right, +Y down'));lv.addWidget(note)
   self.language=language_menu(self,lv)
-  bar=W.QHBoxLayout();self.preset=W.QComboBox();self.preset.addItems([f'Layout {i:02}' for i in range(1,6)]);bar.addWidget(self.preset);self.button(bar,t('Load example'),self.load_example);lv.addLayout(bar)
+  bar=W.QHBoxLayout();self.preset=W.QComboBox();self.preset.addItems([f'Layout {i:02}' for i in range(1,6)]);self.preset.setCurrentIndex(1);bar.addWidget(self.preset);self.button(bar,t('Load example'),self.load_example);lv.addLayout(bar)
   tabs=W.QTabWidget();lv.addWidget(tabs)
   models=W.QWidget();ml=W.QVBoxLayout(models);mscroll=W.QScrollArea();mscroll.setWidgetResizable(True);mscroll.setWidget(models);tabs.addTab(mscroll,t('Scene / Test board'))
   self.objlist=W.QListWidget();self.objlist.currentRowChanged.connect(self.object_selected);ml.addWidget(self.objlist)
@@ -108,9 +114,10 @@ class MainWindow(W.QMainWindow):
   if os.environ.get('MCV_OFFSCREEN')!='1':self.viewer.enable_surface_point_picking(callback=self.picked,use_picker=True,picker='cell',left_clicking=True,show_point=False,show_message=False)
   self.viewer.add_text('Mouse: orbit / zoom | Surface picking: enable on the left',font_size=10,color='#233c4d',position='upper_left',name='hint')
   self.bottom=W.QTabWidget();center.addWidget(self.bottom)
-  self.table=W.QTableWidget(0,5);self.table.setHorizontalHeaderLabels([t('Camera / Metric'),t('Visible area mm2'),t('Visible board W x H mm'),t('Target image fraction'),t('Valid pixel fraction')]);self.table.horizontalHeader().setSectionResizeMode(W.QHeaderView.ResizeMode.Stretch);self.bottom.addTab(self.table,t('Coverage results'))
+  self.table=W.QTableWidget(0,4);self.table.setHorizontalHeaderLabels([t('Metric / Camera pair'),t('Rate'),t('Area mm2'),t('Joint extent mm')]);self.table.horizontalHeader().setSectionResizeMode(W.QHeaderView.ResizeMode.Stretch);self.bottom.addTab(self.table,t('Coverage results'))
   self.log=W.QTextEdit();self.log.setReadOnly(True);self.bottom.addTab(self.log,t('Help / Log'));self.log.setPlainText(t('Area uses visibility sampling on scaled 3D surfaces. Images use the first ray intersection per pixel. Purple pixels indicate invalid distortion inversion and are excluded. Photo regions require aligned cameras and targets. Pick a surface beside an opening, then adjust XYZ to move the optical center into the opening.'))
-  right=W.QWidget();rv=W.QVBoxLayout(right);split.addWidget(right);rv.addWidget(W.QLabel(t('Camera images (distortion / occlusion)')));self.image_tabs=W.QTabWidget();rv.addWidget(self.image_tabs);self.button(rv,t('Import photo / Select region'),self.reference_image);self.button(rv,t('Clear camera region'),self.clear_roi);right.setMinimumWidth(330)
+  right=W.QWidget();rv=W.QVBoxLayout(right);split.addWidget(right);rv.addWidget(W.QLabel(t('All cameras - undistorted views')));self.image_tabs=W.QTabWidget();rv.addWidget(self.image_tabs);self.button(rv,t('Import photo / Select region'),self.reference_image);self.button(rv,t('Clear camera region'),self.clear_roi);right.setMinimumWidth(480)
+  self.overview=W.QWidget();self.camera_grid=W.QGridLayout(self.overview);self.image_tabs.addTab(self.overview,t('All cameras'));self.show_camera_grid([])
   controls=W.QGroupBox(t('Live preview / Keyboard'));control_layout=W.QVBoxLayout(controls);lv.insertWidget(3,controls)
   self.live_preview=W.QCheckBox(t('Live camera preview'));control_layout.addWidget(self.live_preview)
   self.keyboard_enabled=W.QCheckBox(t('Keyboard model control'));self.keyboard_enabled.setChecked(True);control_layout.addWidget(self.keyboard_enabled)
@@ -119,7 +126,7 @@ class MainWindow(W.QMainWindow):
   self.live_timer=C.QTimer(self);self.live_timer.setSingleShot(True);self.live_timer.setInterval(180);self.live_timer.timeout.connect(self.refresh_live)
   self.live_pending=False;self.live_preview.toggled.connect(self.live_toggled);self.res.currentTextChanged.connect(self.schedule_live)
   self.viewer.interactor.setFocusPolicy(C.Qt.FocusPolicy.StrongFocus);self.viewer.interactor.installEventFilter(self)
-  split.setSizes([340,810,400]);center.setSizes([670,220]);self.load_example();translate_widgets(self)
+  split.setSizes([340,620,590]);center.setSizes([670,220]);self.load_example();self.show_camera_grid([]);translate_widgets(self)
  def live_toggled(self,enabled):
   if enabled:self.schedule_live()
   else:self.live_pending=False;self.live_timer.stop()
@@ -154,7 +161,7 @@ class MainWindow(W.QMainWindow):
  def error(self,e):self.log.append(str(e));W.QMessageBox.warning(self,t('Operation failed'),str(e))
  def changed(self):
   if self.updating:return
-  self.revision+=1;self.last=None;self.export_button.setEnabled(False);self.status.setText(t('Scene changed; update images or evaluate coverage.'));self.draw();self.schedule_live()
+  self.revision+=1;self.last=None;self.export_button.setEnabled(False);self.table.setRowCount(0);self.status.setText(t('Scene changed; update images or evaluate coverage.'));self.draw();self.schedule_live()
  def refresh_lists(self):
   oi=self.objlist.currentRow();ci=self.camlist.currentRow();self.updating=True;self.objlist.clear();self.objlist.addItems([o.name for o in self.objects]);self.camlist.clear();self.camlist.addItems([c.name for c in self.cameras]);self.updating=False
   self.objlist.setCurrentRow(max(0,min(oi,len(self.objects)-1)));self.camlist.setCurrentRow(max(0,min(ci,len(self.cameras)-1)))
@@ -266,20 +273,30 @@ class MainWindow(W.QMainWindow):
  def compute_failed(self,msg):self.status.setText(t('Computation failed'));self.error(msg)
  def image_widget(self,array):
   h,w=array.shape[:2];q=G.QImage(np.ascontiguousarray(array).data,w,h,w*3,G.QImage.Format.Format_RGB888).copy();label=W.QLabel();label.setPixmap(G.QPixmap.fromImage(q));label.setAlignment(C.Qt.AlignmentFlag.AlignCenter);scroll=W.QScrollArea();scroll.setWidget(label);scroll.setWidgetResizable(True);return scroll
+ def show_camera_grid(self,images):
+  while self.camera_grid.count():
+   item=self.camera_grid.takeAt(0)
+   if item.widget():item.widget().deleteLater()
+  rendered=dict(images)
+  for i,camera in enumerate(self.cameras):
+   card=W.QGroupBox(camera.name);layout=W.QVBoxLayout(card)
+   if camera.name in rendered:layout.addWidget(CameraImage(rendered[camera.name]['image']))
+   else:
+    placeholder=W.QLabel(t('Waiting for preview') if camera.active else t('Camera disabled'));placeholder.setAlignment(C.Qt.AlignmentFlag.AlignCenter);layout.addWidget(placeholder)
+   self.camera_grid.addWidget(card,i//2,i%2)
+  for column in range(2):self.camera_grid.setColumnStretch(column,1)
+  for row in range(max(1,(len(self.cameras)+1)//2)):self.camera_grid.setRowStretch(row,1)
  def computed(self,result):
   if self.job_revision!=self.revision:self.status.setText(t('Scene changed during computation; outdated results discarded.'));return
-  self.last=result;self.image_tabs.clear();self.table.setRowCount(0);m=result['metrics']
-  for name,r in result['images']:
-   self.image_tabs.addTab(self.image_widget(r['image']),name);area='—'
-   if m:
-    area=next((f"{v['visible_area_mm2']:.1f}" for v in m['per_camera'] if v['name']==name),'—')
-   wh='—'
-   if m:
-    item=next((v for v in m['per_camera'] if v['name']==name),{})
-    if item.get('board_visible_width_mm') is not None:wh=f"{item['board_visible_width_mm']:.1f} × {item['board_visible_height_mm']:.1f}"
-   self.add_row([name,area,wh,f"{r['target_image_fraction']:.1%}",f"{r['valid_pixels_fraction']:.1%}"])
+  self.last=result;self.show_camera_grid(result['images']);self.table.setRowCount(0);m=result['metrics']
   if m:
-   for label,key in [(t('Total target area'),'target_area_mm2'),(t('Visible to at least one camera'),'covered_mm2'),(t('Visible to at least two cameras'),'overlap2_mm2'),(t('Blind surface'),'blind_mm2')]:self.add_row([label,f'{m[key]:.1f}','—','—','—'])
+   wh=f"{m['union_board_width_mm']:.1f} × {m['union_board_height_mm']:.1f}" if m['union_board_width_mm'] is not None else t('See world bounds below')
+   self.add_row([t('Combined coverage / Target area'),f"{m['coverage_fraction']:.1%}",f"{m['covered_mm2']:.1f}",wh])
+   overlap=m['overlap_of_covered_fraction'];self.add_row([t('Multi-camera overlap / Combined coverage'),f'{overlap:.1%}' if overlap is not None else '—',f"{m['overlap2_mm2']:.1f}",'—'])
+   self.add_row([t('Blind surface'),f"{1-m['coverage_fraction']:.1%}",f"{m['blind_mm2']:.1f}",'—'])
+   for pair in m['pairs']:
+    rate=pair['IoU'];self.add_row([' ↔ '.join(pair['cameras'])+' (IoU)',f'{rate:.1%}' if rate is not None else '—',f"{pair['intersection_mm2']:.1f}",'—'])
+   if m['union_world_bbox_mm'] is not None:self.log.append(t('Combined world bounds mm')+': '+str(m['union_world_bbox_mm']))
    cloud=pv.PolyData(result['points']);cloud['camera_count']=result['counts'];self.viewer.add_mesh(cloud,scalars='camera_count',clim=[0,max(1,len([c for c in self.cameras if c.active]))],cmap='viridis',point_size=4,render_points_as_spheres=False,name='coverage',pickable=False,scalar_bar_args={'title':'Visible cameras'});self.log.append(json.dumps(m,ensure_ascii=False,indent=2))
   self.export_button.setEnabled(True);self.status.setText(t('Done. Images are geometric simulations; areas are sampled estimates.'))
  def add_row(self,values):
@@ -307,7 +324,10 @@ class MainWindow(W.QMainWindow):
    cv2.imwrite(str(p/f'camera_{i+1}.png'),cv2.cvtColor(r['image'],cv2.COLOR_RGB2BGR));cv2.imwrite(str(p/f'camera_{i+1}_target_mask.png'),r['mask'].astype('uint8')*255);np.save(p/f'camera_{i+1}_depth_mm.npy',r['depth_mm']);summary.append({'name':name,**{k:v for k,v in r.items() if not isinstance(v,np.ndarray)}})
   data={'camera_images':summary,'surface_metrics':self.last['metrics'],'units':'mm, mm2','method':'First-hit ray image; equal-area stratified surface samples. Approximate geometric result.'};(p/'metrics.json').write_text(json.dumps(data,indent=2,ensure_ascii=False))
   if self.last['metrics']:
-   with (p/'camera_areas.csv').open('w',newline='') as f:w=csv.DictWriter(f,fieldnames=['name','visible_area_mm2','world_bbox_extent_mm','board_visible_width_mm','board_visible_height_mm']);w.writeheader();w.writerows(self.last['metrics']['per_camera'])
+   with (p/'camera_overlap.csv').open('w',newline='') as f:
+    w=csv.DictWriter(f,fieldnames=['camera_a','camera_b','intersection_mm2','IoU']);w.writeheader()
+    for pair in self.last['metrics']['pairs']:w.writerow({'camera_a':pair['cameras'][0],'camera_b':pair['cameras'][1],'intersection_mm2':pair['intersection_mm2'],'IoU':pair['IoU']})
+   combined={k:v for k,v in self.last['metrics'].items() if k not in ('per_camera','pairs')};(p/'combined_coverage.json').write_text(json.dumps(combined,indent=2),encoding='utf-8')
    np.savez_compressed(p/'coverage.npz',points=self.last['points'],visible_camera_count=self.last['counts']);col=np.array([[50,50,50],[60,145,210],[47,177,140],[236,197,66],[224,100,57]]);trimesh.points.PointCloud(self.last['points'],colors=col[np.minimum(self.last['counts'],4)]).export(p/'coverage.ply')
  def clear_roi(self):
   i=self.camlist.currentRow()

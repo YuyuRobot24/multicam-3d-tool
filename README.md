@@ -19,6 +19,10 @@ Alternatively, install Python 3.12 with the Python Launcher and double-click `st
 
 ## Language and live preview
 
+The default four-camera layout is shown in a 2×2 overview, so all cameras can be compared at once. Other layouts display their available cameras in the same grid. Displayed and exported simulated images are undistorted pinhole views using the original focal length; unsupported borders remain black. Depth, target masks and object IDs use the same corrected pixel coordinates. Exports include the corrected display calibration. Original calibration and photo-region masks remain unchanged for geometric visibility evaluation.
+
+The evaluation panel reports **joint coverage**, not separate camera footprints: union area / target area, union width × height on a single test board, multi-camera overlap area / union area, blind area, and every camera pair's IoU (intersection / union). Undefined overlap for two empty views is shown as a dash. Width × height is a sampled bounding extent, not filled area; general curved targets use world-coordinate bounds in the log. Exported `camera_overlap.csv` and `combined_coverage.json` contain these joint metrics.
+
 English is the default at each launch. Select **English / 中文** from the dropdown on the startup dialog or main window. Switching languages preserves the current scene, poses, calibration and results.
 
 Enable **Live camera preview** to automatically update ray images after scene changes. Changes are debounced and computed on a background thread. Only one computation runs at a time; outdated results are discarded and the latest scene is refreshed afterward. Rendering speed depends on scene complexity and image resolution; this is not a fixed video frame rate. Live mode starts at 160 px for responsiveness. Increase **Image width px** for detail. Coverage evaluation remains an explicit action.

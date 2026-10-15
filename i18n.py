@@ -3,6 +3,12 @@ from PySide6 import QtWidgets as W
 
 LANGUAGE = 'en'
 ZH = {
+ 'Metric / Camera pair':'指标 / 相机对','Rate':'比例','Area mm2':'面积 mm²','Joint extent mm':'联合范围 mm',
+ 'All cameras - undistorted views':'全部相机 - 去畸变画面','All cameras':'全部相机',
+ 'Waiting for preview':'等待预览','Camera disabled':'相机已禁用',
+ 'Combined coverage / Target area':'联合覆盖 / 目标总面积',
+ 'Multi-camera overlap / Combined coverage':'多目重叠 / 联合覆盖',
+ 'See world bounds below':'详见日志中的世界坐标范围','Combined world bounds mm':'联合覆盖世界坐标范围 mm',
  'housing':'结构','target':'目标','occluder':'遮挡物','Test board':'测试板','Demo curved target':'演示曲面',
  'Multicam 3D - Start':'多相机 3D - 启动',
  '<h2>Multicam 3D Workbench</h2>':'<h2>多相机 3D 工作台</h2>',

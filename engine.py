@@ -162,7 +162,27 @@ def project_visible(points,camera):
   ids=np.flatnonzero(v);ij=np.floor(uv[ids]+.5).astype(int);ij[:,0]=np.clip(ij[:,0],0,w-1);ij[:,1]=np.clip(ij[:,1],0,h-1);v[ids]&=camera.image_mask[ij[:,1],ij[:,0]]>0
  return v
 
-def render_camera(objects,camera,width=320,prepared=None):
+def rectify_render(result,intrinsics):
+ """Remap calibrated sensor pixels to a pinhole view; keep invalid borders masked."""
+ w,h=result['preview_size'];iw,ih=intrinsics['image_size'];sx,sy=w/iw,h/ih
+ K=np.array(intrinsics['K'],float);K[0]*=sx;K[1]*=sy
+ K[0,2]+=(sx-1)/2;K[1,2]+=(sy-1)/2
+ D=np.asarray(intrinsics['D'],float)
+ if intrinsics['model']=='fisheye':mx,my=cv2.fisheye.initUndistortRectifyMap(K,D,np.eye(3),K,(w,h),cv2.CV_32FC1)
+ else:mx,my=cv2.initUndistortRectifyMap(K,D if D.size else None,np.eye(3),K,(w,h),cv2.CV_32FC1)
+ _,source_valid,shape=pixel_rays(intrinsics,w)
+ support=cv2.remap(source_valid.reshape(shape).astype('float32'),mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT,borderValue=0)>.999
+ out=dict(result)
+ for key,border in [('image',0),('mask',0),('depth_mm',float('nan')),('object_ids',-1)]:
+  array=result[key];array=array.astype('uint8') if key=='mask' else array.astype('float32') if key=='object_ids' else array
+  remapped=cv2.remap(array,mx,my,cv2.INTER_LINEAR if key=='image' else cv2.INTER_NEAREST,borderMode=cv2.BORDER_CONSTANT,borderValue=border)
+  remapped[~support]=border
+  out[key]=remapped.astype(bool) if key=='mask' else remapped.astype(int) if key=='object_ids' else remapped
+ ys,xs=np.where(out['mask'])
+ out.update(valid_pixels_fraction=float(support.mean()),target_image_fraction=float(out['mask'].mean()),target_bbox_preview_pixels=[int(xs.min()),int(ys.min()),int(xs.max()+1),int(ys.max()+1)] if len(xs) else None,display_model='undistorted_pinhole',display_intrinsics={'K':K.tolist(),'D':[],'image_size':[w,h],'model':'opencv'})
+ return out
+
+def render_camera(objects,camera,width=320,prepared=None,rectified=False):
  mesh,owner=prepared if prepared is not None else build_scene(objects)
  rays,valid,shape=pixel_rays(camera.intrinsics,width);world=rays@camera.rotation.T;ids=np.flatnonzero(valid);orig=np.tile(camera.center,(len(ids),1))+world[ids]*.001
  d,fi=ray_hits(mesh,orig,world[ids]);rgb=np.tile([19,27,38],(len(rays),1)).astype(np.uint8);rgb[~valid]=[88,43,91];object_ids=np.full(len(rays),-1,int);depth=np.full(len(rays),np.nan);hit=np.flatnonzero(fi>=0)
@@ -182,7 +202,8 @@ def render_camera(objects,camera,width=320,prepared=None):
   mx=np.minimum(((np.arange(shape[1])+.5)*iw/shape[1]).astype(int),iw-1);my=np.minimum(((np.arange(shape[0])+.5)*ih/shape[0]).astype(int),ih-1);roi=camera.image_mask[np.ix_(my,mx)].ravel()>0;mask&=roi;rgb[~roi]=(rgb[~roi]*.3).astype('uint8')
  ys,xs=np.where(mask.reshape(shape));bbox=None
  if len(xs):bbox=[int(xs.min()),int(ys.min()),int(xs.max()+1),int(ys.max()+1)]
- return {'image':rgb.reshape(*shape,3),'mask':mask.reshape(shape),'depth_mm':depth.reshape(shape),'object_ids':object_ids.reshape(shape),'valid_pixels_fraction':float(valid.mean()),'target_image_fraction':float(mask.mean()),'target_bbox_preview_pixels':bbox,'preview_size':[shape[1],shape[0]]}
+ result={'image':rgb.reshape(*shape,3),'mask':mask.reshape(shape),'depth_mm':depth.reshape(shape),'object_ids':object_ids.reshape(shape),'valid_pixels_fraction':float(valid.mean()),'target_image_fraction':float(mask.mean()),'target_bbox_preview_pixels':bbox,'preview_size':[shape[1],shape[0]]}
+ return rectify_render(result,camera.intrinsics) if rectified else result
 
 def sample_targets(objects,n=10000):
  meshes=[o.world_mesh() for o in objects if o.enabled and o.role=='target']
@@ -215,6 +236,14 @@ def evaluate(objects,cameras,n=10000,prepared=None):
   for j in range(i+1,len(active)):
    a=float(weights[seen[i]&seen[j]].sum());u=float(weights[seen[i]|seen[j]].sum());out['pairs'].append({'cameras':[active[i].name,active[j].name],'intersection_mm2':a,'IoU':a/u if u else None})
  out['coverage_fraction']=out['covered_mm2']/total;out['overlap2_fraction']=out['overlap2_mm2']/total
+ out['overlap_of_covered_fraction']=out['overlap2_mm2']/out['covered_mm2'] if out['covered_mm2'] else None
+ covered=points[count>=1];out['union_world_bbox_mm']=[covered.min(0).tolist(),covered.max(0).tolist()] if len(covered) else None
+ out['union_board_width_mm']=None;out['union_board_height_mm']=None
+ boards=[o for o in objects if o.enabled and o.role=='target']
+ if len(boards)==1 and boards[0].name=='Test board':
+  o=boards[0];R=Rotation.from_euler('xyz',o.angles,degrees=True).as_matrix();local=(covered-o.position)@R
+  extent=local.max(0)-local.min(0) if len(local) else np.zeros(3)
+  out['union_board_width_mm']=float(extent[0]);out['union_board_height_mm']=float(extent[1])
  return out,points,count
 
 def save_session(path,objects,cameras):
