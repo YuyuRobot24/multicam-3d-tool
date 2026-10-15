@@ -98,12 +98,29 @@ class UiTests(unittest.TestCase):
  def test_mouse_picking_selects_model_and_opens_interaction(self):
   from vtkmodules.vtkRenderingCore import vtkCoordinate
   w=self.window;w.objlist.setCurrentRow(0)
-  coordinate=vtkCoordinate();coordinate.SetCoordinateSystemToWorld();coordinate.SetValue(-207,18,18)
+  coordinate=vtkCoordinate();coordinate.SetCoordinateSystemToWorld();coordinate.SetValue(-307,180,180)
   x,y=coordinate.GetComputedDoubleDisplayValue(w.viewer.renderer)
   width,height=w.viewer.render_window.GetSize()
   w.pick_object_at(x*w.viewer.interactor.width()/width,(height-1-y)*w.viewer.interactor.height()/height)
   self.assertEqual(w.objlist.currentRow(),1)
   self.assertIs(w.side_tabs.currentWidget(),w.interaction_panel)
+
+ def test_large_board_has_independent_adjustable_handle_size(self):
+  w=self.window
+  self.assertEqual(w.bd.value(),150)
+  self.assertEqual(w.bw.value(),500)
+  self.assertEqual(w.bh.value(),500)
+  self.assertAlmostEqual(w.objects[1].position[0],w.tipx.value()-150)
+  initial=w.gizmo._arrows[0].GetLength()
+  arc=w.gizmo._circles[0].GetLength()
+  revision=w.revision
+  w.bw.setValue(1000);w.bh.setValue(1000);w.make_board()
+  self.assertAlmostEqual(w.gizmo._arrows[0].GetLength(),initial,places=5)
+  self.assertAlmostEqual(w.gizmo._circles[0].GetLength(),arc,places=5)
+  revision=w.revision;w.gizmo_size.setValue(50)
+  self.assertAlmostEqual(w.gizmo._arrows[0].GetLength(),initial*2,places=5)
+  self.assertEqual(w.revision,revision)
+  self.assertIsNone(w.worker)
 
  def test_mouse_drags_translation_arrow_and_rotation_arc(self):
   import numpy as np
@@ -111,6 +128,8 @@ class UiTests(unittest.TestCase):
   from vtkmodules.vtkRenderingCore import vtkCoordinate
   from engine import Rotation
   w=self.window;view=w.viewer.interactor
+  # Zoom in for pixel-accurate picking of the fixed-size handles on a 500 mm board.
+  w.viewer.camera.zoom(3);w.viewer.render();self.app.processEvents()
   def screen(point):
    c=vtkCoordinate();c.SetCoordinateSystemToWorld();c.SetValue(*point)
    x,y=c.GetComputedDoubleDisplayValue(w.viewer.renderer);width,height=w.viewer.render_window.GetSize()

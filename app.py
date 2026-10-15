@@ -80,7 +80,7 @@ class MainWindow(W.QMainWindow):
   self.scale=self.number(1,.000001,100000,6);self.scale.valueChanged.connect(self.object_changed);f=W.QFormLayout();f.addRow(t('Unit conversion / Scale'),self.scale);ml.addLayout(f)
   row=W.QHBoxLayout();self.button(row,t('Center in test area'),self.center_target);self.button(row,t('Fit scene'),lambda:self.draw(True));ml.addLayout(row)
   ml.addWidget(W.QLabel(t('Test board (local XY plane)')))
-  f=W.QFormLayout();self.bw=self.number(50,1,2000);self.bh=self.number(50,1,2000);self.bd=self.number(50,.1,2000);self.tipx=self.number(-157);f.addRow(t('Tip reference X mm'),self.tipx);f.addRow(t('Width mm'),self.bw);f.addRow(t('Height mm'),self.bh);f.addRow(t('Distance from tip -X mm'),self.bd);ml.addLayout(f)
+  f=W.QFormLayout();self.bw=self.number(500,1,2000);self.bh=self.number(500,1,2000);self.bd=self.number(150,.1,2000);self.tipx=self.number(-157);f.addRow(t('Tip reference X mm'),self.tipx);f.addRow(t('Width mm'),self.bw);f.addRow(t('Height mm'),self.bh);f.addRow(t('Distance from tip -X mm'),self.bd);ml.addLayout(f)
   self.button(ml,t('Create / Reset board'),self.make_board)
   self.button(ml,t('Load curved demo'),self.demo_surface)
   ml.addWidget(W.QLabel(t('Set imported teeth/head to target; disable the board if needed. All target surfaces count, including the back.')))
@@ -111,6 +111,7 @@ class MainWindow(W.QMainWindow):
   controls=W.QGroupBox(t('Object interaction'));control_layout=W.QVBoxLayout(controls);tabs.addTab(controls,t('Interaction'));self.side_tabs=tabs;self.interaction_panel=controls
   self.selected_label=W.QLabel();control_layout.addWidget(self.selected_label)
   steps=W.QFormLayout();self.move_step=self.number(1,.001,1000);self.rotate_step=self.number(2,.01,180);steps.addRow(t('Move step mm'),self.move_step);steps.addRow(t('Rotate step deg'),self.rotate_step);control_layout.addLayout(steps)
+  self.gizmo_size=self.number(25,1,2000);self.gizmo_size.valueChanged.connect(lambda _:self.draw());steps.addRow(t('Handle size mm'),self.gizmo_size)
   arrows=W.QGridLayout();self.transform_buttons=[]
   for axis,label in enumerate(['X','Y','Z',t('Roll (X)'),t('Pitch (Y)'),t('Yaw (Z)')]):
    arrows.addWidget(W.QLabel(label),axis,0)
@@ -145,7 +146,11 @@ class MainWindow(W.QMainWindow):
   i=self.objlist.currentRow()
   if self.picking or i not in self.object_actors:return
   obj=self.objects[i];position=obj.position.copy();angles=obj.angles.copy()
-  self.gizmo=self.viewer.add_affine_transform_widget(self.object_actors[i],scale=.22,axes_colors=('red','green','blue'),release_callback=lambda matrix:self.finish_transform(i,matrix,position,angles))
+  actor=self.object_actors[i]
+  # PyVista scales handles by the actor diagonal. Cancel that factor so a
+  # larger or rotated model does not produce larger arrows and rotation arcs.
+  handle_scale=self.gizmo_size.value()/max(actor.GetLength(),1e-9)
+  self.gizmo=self.viewer.add_affine_transform_widget(actor,scale=handle_scale,axes_colors=('red','green','blue'),release_callback=lambda matrix:self.finish_transform(i,matrix,position,angles))
  def finish_transform(self,index,matrix,position,angles):
   matrix=np.asarray(matrix)
   if np.allclose(matrix,np.eye(4)):return

@@ -29,6 +29,8 @@ Press **Update images** to render camera images or **Evaluate coverage** to rend
 
 ## Mouse model controls
 
+The default test distance is 150 mm from the tip reference, with a 500 × 500 mm test board. Transform handles use a fixed world-space size independent of model bounds, rotation or scale. Adjust **Handle size mm** in the Interaction tab (default 25) to control arrow and arc size without changing model dimensions or triggering computation.
+
 Click a model in the 3D viewport to select it and open the **Interaction** tab. Selection shows a colored transform manipulator on the model. Drag a straight arrow to translate along its world axis; drag a curved arc to rotate about that axis around the model center. Red represents X / Roll, green Y / Pitch, and blue Z / Yaw.
 
 The **Interaction** tab also provides negative/positive arrow buttons for X, Y, Z, Roll, Pitch and Yaw. Set **Move step mm** and **Rotate step deg** for precise increments. Numeric pose fields show XYZ position and XYZ Euler angles as Roll/Pitch/Yaw; rotations use the existing right-handed extrinsic XYZ convention. Manipulator changes are committed to the scene when the mouse is released and are saved in `.mcv` projects.
