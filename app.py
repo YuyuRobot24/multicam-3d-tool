@@ -15,15 +15,6 @@ from engine import *
 from i18n import t, language_menu, translate_widgets
 ROOT=Path(__file__).resolve().parent
 
-class LaunchDialog(W.QDialog):
- def __init__(self):
-  super().__init__();self.setWindowTitle(t('Multicam 3D - Start'));self.resize(520,300)
-  layout=W.QVBoxLayout(self);self.language=language_menu(self,layout);layout.addWidget(W.QLabel(t('<h2>Multicam 3D Workbench</h2>')))
-  help=W.QLabel(t('Inspect calibrated camera views and geometric coverage.\n\nSelect a model, then click the 3D viewport.\nMove: W/S = +/-X, A/D = -/+Y, Q/E = -/+Z\nRotate: I/K = +/-X, J/L = +/-Y, U/O = +/-Z\nHold Shift for 5x steps. F = fit scene.\nKeyboard input is active only in the 3D viewport.'))
-  help.setWordWrap(True);layout.addWidget(help)
-  self.live=W.QCheckBox(t('Enable live camera preview'));self.live.setChecked(True);layout.addWidget(self.live)
-  buttons=W.QDialogButtonBox(W.QDialogButtonBox.StandardButton.Ok|W.QDialogButtonBox.StandardButton.Cancel);buttons.button(W.QDialogButtonBox.StandardButton.Ok).setText(t('Start simulator'));buttons.accepted.connect(self.accept);buttons.rejected.connect(self.reject);layout.addWidget(buttons);translate_widgets(self)
-
 class CameraImage(W.QLabel):
  def __init__(self,array):
   super().__init__();h,w=array.shape[:2];q=G.QImage(np.ascontiguousarray(array).data,w,h,w*3,G.QImage.Format.Format_RGB888).copy();self.source=G.QPixmap.fromImage(q);self.setMinimumSize(100,70);self.setAlignment(C.Qt.AlignmentFlag.AlignCenter)
@@ -71,7 +62,7 @@ class ComputeWorker(C.QThread):
 class MainWindow(W.QMainWindow):
  def __init__(self):
   super().__init__();self.setWindowTitle(t('Multicam 3D Visibility Workbench - mm'));self.resize(1550,940)
-  self.objects=[];self.cameras=[];self.last=None;self.worker=None;self.revision=0;self.picking=False;self.updating=False
+  self.objects=[];self.cameras=[];self.last=None;self.worker=None;self.revision=0;self.picking=False;self.updating=False;self.gizmo=None;self.object_actors={};self.mouse_press=None
   split=W.QSplitter();self.setCentralWidget(split);left=W.QWidget();lv=W.QVBoxLayout(left);left.setMinimumWidth(300);left.setMaximumWidth(390);split.addWidget(left)
   title=W.QLabel(t('Multicam 3D Workbench'));title.setStyleSheet('font-size:21px;font-weight:600;color:#0f766e');lv.addWidget(title)
   note=W.QLabel(t('Length mm - Angles deg - Area mm2\nCamera: +Z forward, +X right, +Y down'));lv.addWidget(note)
@@ -111,40 +102,56 @@ class MainWindow(W.QMainWindow):
   self.status=W.QLabel(t('Ready'));self.status.setWordWrap(True);lv.addWidget(self.status)
   center=W.QSplitter(C.Qt.Orientation.Vertical);split.addWidget(center)
   self.viewer=QtInteractor(self,off_screen=os.environ.get('MCV_OFFSCREEN')=='1');center.addWidget(self.viewer.interactor);self.viewer.set_background('#edf2f6');self.viewer.add_axes();
-  if os.environ.get('MCV_OFFSCREEN')!='1':self.viewer.enable_surface_point_picking(callback=self.picked,use_picker=True,picker='cell',left_clicking=True,show_point=False,show_message=False)
   self.viewer.add_text('Mouse: orbit / zoom | Surface picking: enable on the left',font_size=10,color='#233c4d',position='upper_left',name='hint')
   self.bottom=W.QTabWidget();center.addWidget(self.bottom)
   self.table=W.QTableWidget(0,4);self.table.setHorizontalHeaderLabels([t('Metric / Camera pair'),t('Rate'),t('Area mm2'),t('Joint extent mm')]);self.table.horizontalHeader().setSectionResizeMode(W.QHeaderView.ResizeMode.Stretch);self.bottom.addTab(self.table,t('Coverage results'))
   self.log=W.QTextEdit();self.log.setReadOnly(True);self.bottom.addTab(self.log,t('Help / Log'));self.log.setPlainText(t('Area uses visibility sampling on scaled 3D surfaces. Images use the first ray intersection per pixel. Purple pixels indicate invalid distortion inversion and are excluded. Photo regions require aligned cameras and targets. Pick a surface beside an opening, then adjust XYZ to move the optical center into the opening.'))
   right=W.QWidget();rv=W.QVBoxLayout(right);split.addWidget(right);rv.addWidget(W.QLabel(t('All cameras - undistorted views')));self.image_tabs=W.QTabWidget();rv.addWidget(self.image_tabs);self.button(rv,t('Import photo / Select region'),self.reference_image);self.button(rv,t('Clear camera region'),self.clear_roi);right.setMinimumWidth(480)
   self.overview=W.QWidget();self.camera_grid=W.QGridLayout(self.overview);self.image_tabs.addTab(self.overview,t('All cameras'));self.show_camera_grid([])
-  controls=W.QGroupBox(t('Live preview / Keyboard'));control_layout=W.QVBoxLayout(controls);lv.insertWidget(3,controls)
-  self.live_preview=W.QCheckBox(t('Live camera preview'));control_layout.addWidget(self.live_preview)
-  self.keyboard_enabled=W.QCheckBox(t('Keyboard model control'));self.keyboard_enabled.setChecked(True);control_layout.addWidget(self.keyboard_enabled)
+  controls=W.QGroupBox(t('Object interaction'));control_layout=W.QVBoxLayout(controls);tabs.addTab(controls,t('Interaction'));self.side_tabs=tabs;self.interaction_panel=controls
+  self.selected_label=W.QLabel();control_layout.addWidget(self.selected_label)
   steps=W.QFormLayout();self.move_step=self.number(1,.001,1000);self.rotate_step=self.number(2,.01,180);steps.addRow(t('Move step mm'),self.move_step);steps.addRow(t('Rotate step deg'),self.rotate_step);control_layout.addLayout(steps)
-  hint=W.QLabel(t('Click the 3D view to control the selected model.\nMove: W/S X, A/D Y, Q/E Z\nRotate: I/K X, J/L Y, U/O Z\nShift: 5x step | F: fit scene'));hint.setWordWrap(True);control_layout.addWidget(hint)
-  self.live_timer=C.QTimer(self);self.live_timer.setSingleShot(True);self.live_timer.setInterval(180);self.live_timer.timeout.connect(self.refresh_live)
-  self.live_pending=False;self.live_preview.toggled.connect(self.live_toggled);self.res.currentTextChanged.connect(self.schedule_live)
+  arrows=W.QGridLayout();self.transform_buttons=[]
+  for axis,label in enumerate(['X','Y','Z',t('Roll (X)'),t('Pitch (Y)'),t('Yaw (Z)')]):
+   arrows.addWidget(W.QLabel(label),axis,0)
+   for column,direction in [(1,-1),(2,1)]:
+    button=W.QPushButton('◀' if direction<0 else '▶');button.setToolTip(label+(' -' if direction<0 else ' +'));button.clicked.connect(lambda _,a=axis,d=direction:self.nudge_model(a,d));arrows.addWidget(button,axis,column);self.transform_buttons.append(button)
+  control_layout.addLayout(arrows)
+  hint=W.QLabel(t('Click a model to select it. Drag colored arrows to move; drag arcs to rotate. Red: X / Roll, green: Y / Pitch, blue: Z / Yaw. Use the arrow buttons for precise steps. Images and evaluation update only when you press their buttons.'));hint.setWordWrap(True);control_layout.addWidget(hint);control_layout.addStretch()
   self.viewer.interactor.setFocusPolicy(C.Qt.FocusPolicy.StrongFocus);self.viewer.interactor.installEventFilter(self)
   split.setSizes([340,620,590]);center.setSizes([670,220]);self.load_example();self.show_camera_grid([]);translate_widgets(self)
- def live_toggled(self,enabled):
-  if enabled:self.schedule_live()
-  else:self.live_pending=False;self.live_timer.stop()
- def schedule_live(self,*_):
-  if self.live_preview.isChecked():self.live_pending=True;self.live_timer.start()
- def refresh_live(self):
-  if not self.live_preview.isChecked():return
-  if self.worker and self.worker.isRunning():return
-  if self.live_pending:self.live_pending=False;self.compute(False)
  def eventFilter(self,watched,event):
-  if watched is self.viewer.interactor and event.type()==C.QEvent.Type.KeyPress and self.keyboard_enabled.isChecked():
-   if event.modifiers() & (C.Qt.KeyboardModifier.ControlModifier|C.Qt.KeyboardModifier.AltModifier|C.Qt.KeyboardModifier.MetaModifier):return False
-   key=event.key()
-   if key==C.Qt.Key.Key_F:self.draw(True);return True
-   keys={C.Qt.Key.Key_W:(0,1),C.Qt.Key.Key_S:(0,-1),C.Qt.Key.Key_A:(1,-1),C.Qt.Key.Key_D:(1,1),C.Qt.Key.Key_Q:(2,-1),C.Qt.Key.Key_E:(2,1),C.Qt.Key.Key_I:(3,1),C.Qt.Key.Key_K:(3,-1),C.Qt.Key.Key_J:(4,1),C.Qt.Key.Key_L:(4,-1),C.Qt.Key.Key_U:(5,1),C.Qt.Key.Key_O:(5,-1)}
-   if key in keys:
-    axis,direction=keys[key];self.nudge_model(axis,direction,5 if event.modifiers() & C.Qt.KeyboardModifier.ShiftModifier else 1);return True
+  if watched is self.viewer.interactor:
+   if event.type()==C.QEvent.Type.MouseButtonPress and event.button()==C.Qt.MouseButton.LeftButton:self.mouse_press=event.position()
+   elif event.type()==C.QEvent.Type.MouseButtonRelease and event.button()==C.Qt.MouseButton.LeftButton:
+    position=event.position()
+    if self.mouse_press is not None and (position-self.mouse_press).manhattanLength()<4:
+     x,y=position.x(),position.y();C.QTimer.singleShot(0,lambda:self.pick_object_at(x,y))
+    self.mouse_press=None
   return super().eventFilter(watched,event)
+ def pick_object_at(self,x,y):
+  from vtkmodules.vtkRenderingCore import vtkCellPicker
+  width,height=self.viewer.render_window.GetSize();picker=vtkCellPicker();picker.SetTolerance(.005)
+  picker.Pick(x*width/max(1,self.viewer.interactor.width()),height-1-y*height/max(1,self.viewer.interactor.height()),0,self.viewer.renderer)
+  actor=picker.GetActor()
+  for index,model_actor in self.object_actors.items():
+   if actor is model_actor or actor==model_actor:
+    if self.picking:self.picked(np.array(picker.GetPickPosition()),picker)
+    else:self.objlist.setCurrentRow(index);self.side_tabs.setCurrentWidget(self.interaction_panel)
+    return
+ def clear_gizmo(self):
+  if self.gizmo is not None:self.gizmo.remove();self.gizmo=None
+ def attach_gizmo(self):
+  i=self.objlist.currentRow()
+  if self.picking or i not in self.object_actors:return
+  obj=self.objects[i];position=obj.position.copy();angles=obj.angles.copy()
+  self.gizmo=self.viewer.add_affine_transform_widget(self.object_actors[i],scale=.22,axes_colors=('red','green','blue'),release_callback=lambda matrix:self.finish_transform(i,matrix,position,angles))
+ def finish_transform(self,index,matrix,position,angles):
+  matrix=np.asarray(matrix)
+  if np.allclose(matrix,np.eye(4)):return
+  obj=self.objects[index];obj.position=matrix[:3,:3]@position+matrix[:3,3];obj.angles=Rotation.from_matrix(matrix[:3,:3]@Rotation.from_euler('xyz',angles,degrees=True).as_matrix()).as_euler('xyz',degrees=True)
+  self.revision+=1;self.last=None;self.export_button.setEnabled(False);self.table.setRowCount(0);self.status.setText(t('Scene changed; update images or evaluate coverage.'))
+  C.QTimer.singleShot(0,self.object_selected)
  def nudge_model(self,axis,direction,multiplier=1):
   i=self.objlist.currentRow()
   if i<0:return
@@ -155,13 +162,13 @@ class MainWindow(W.QMainWindow):
   s=W.QDoubleSpinBox();s.setRange(lo,hi);s.setDecimals(dec);s.setValue(value);s.setSingleStep(.1);s.setKeyboardTracking(False);return s
  def pose_fields(self,layout,fn):
   f=W.QFormLayout();a=[]
-  for label in ['X mm','Y mm','Z mm',t('Rotate X deg'),t('Rotate Y deg'),t('Rotate Z deg')]:
+  for label in ['X mm','Y mm','Z mm',t('Roll (X)'),t('Pitch (Y)'),t('Yaw (Z)')]:
    s=self.number(0);s.valueChanged.connect(fn);f.addRow(label,s);a.append(s)
   layout.addLayout(f);return a
  def error(self,e):self.log.append(str(e));W.QMessageBox.warning(self,t('Operation failed'),str(e))
  def changed(self):
   if self.updating:return
-  self.revision+=1;self.last=None;self.export_button.setEnabled(False);self.table.setRowCount(0);self.status.setText(t('Scene changed; update images or evaluate coverage.'));self.draw();self.schedule_live()
+  self.revision+=1;self.last=None;self.export_button.setEnabled(False);self.table.setRowCount(0);self.status.setText(t('Scene changed; update images or evaluate coverage.'));self.draw()
  def refresh_lists(self):
   oi=self.objlist.currentRow();ci=self.camlist.currentRow();self.updating=True;self.objlist.clear();self.objlist.addItems([o.name for o in self.objects]);self.camlist.clear();self.camlist.addItems([c.name for c in self.cameras]);self.updating=False
   self.objlist.setCurrentRow(max(0,min(oi,len(self.objects)-1)));self.camlist.setCurrentRow(max(0,min(ci,len(self.cameras)-1)))
@@ -170,10 +177,11 @@ class MainWindow(W.QMainWindow):
    i=self.preset.currentIndex()+1;p=ROOT/'examples';cfg=json.loads((p/'configs'/f'layout_{i:02}.json').read_text());self.objects=[Object3D(f'Layout {i:02}',import_mesh(p/'models'/f'layout_{i:02}.npz'))];self.cameras=[Camera(c['id'],np.array(c['center_world_mm']),np.array(c['R_world_from_camera']),validate_calibration(c.get('intrinsics') or DEFAULT_K)) for c in cfg['cameras']];self.make_board();self.refresh_lists();self.changed();self.draw(True)
   except Exception as e:self.error(e)
  def draw(self,reset=False):
+  self.clear_gizmo();self.object_actors={}
   old=self.viewer.camera_position;self.viewer.clear();self.viewer.add_axes();self.viewer.add_text(f'mm | Camera guides: {self.frustum_length.value():g} mm',font_size=10,color='#233c4d',name='hint')
   for i,o in enumerate(self.objects):
    if not o.enabled:continue
-   m=o.world_mesh();poly=pv.PolyData(m.vertices,np.column_stack([np.full(len(m.faces),3),m.faces]).ravel());col={'housing':'#9cabb9','target':'#e3b05d','occluder':'#796f87'}[o.role];self.viewer.add_mesh(poly,color=col,smooth_shading=False,pickable=True,name=f'obj{i}')
+   m=o.world_mesh();poly=pv.PolyData(m.vertices,np.column_stack([np.full(len(m.faces),3),m.faces]).ravel());col={'housing':'#9cabb9','target':'#e3b05d','occluder':'#796f87'}[o.role];self.object_actors[i]=self.viewer.add_mesh(poly,color=col,smooth_shading=False,pickable=True,name=f'obj{i}',show_edges=i==self.objlist.currentRow(),edge_color='#f5c542')
   for i,c in enumerate(self.cameras):
    col='#0e938d' if i==self.camlist.currentRow() else '#dd633e';col=col if c.active else '#777777'
    self.viewer.add_mesh(pv.Sphere(radius=.8,center=c.center),color=col,pickable=False)
@@ -186,13 +194,13 @@ class MainWindow(W.QMainWindow):
    except Exception:pass
   if reset:self.viewer.view_isometric();self.viewer.reset_camera()
   else:self.viewer.camera_position=old
-  self.viewer.render()
+  self.attach_gizmo();self.viewer.render()
  def object_selected(self,*_):
   i=self.objlist.currentRow()
   if self.updating or not 0<=i<len(self.objects):return
-  self.updating=True;o=self.objects[i];self.role.setCurrentIndex(self.role.findData(o.role));self.enabled.setChecked(o.enabled);self.scale.setValue(o.scale)
+  self.updating=True;o=self.objects[i];self.selected_label.setText(o.name);self.role.setCurrentIndex(self.role.findData(o.role));self.enabled.setChecked(o.enabled);self.scale.setValue(o.scale)
   for s,v in zip(self.objfields,np.r_[o.position,o.angles]):s.setValue(float(v))
-  self.updating=False
+  self.updating=False;self.draw()
  def object_changed(self,*_):
   i=self.objlist.currentRow()
   if self.updating or not 0<=i<len(self.objects):return
@@ -207,7 +215,7 @@ class MainWindow(W.QMainWindow):
   i=self.camlist.currentRow()
   if self.updating or not 0<=i<len(self.cameras):return
   c=self.cameras[i];a=np.array([s.value() for s in self.camfields]);c.center=a[:3];c.rotation=Rotation.from_euler('xyz',a[3:],degrees=True).as_matrix();c.active=self.camactive.isChecked();self.changed()
- def start_pick(self):self.picking=True;self.status.setText(t('Left-click a surface to add a camera pointing along its normal. Adjust its pose or flip its axis afterward.'))
+ def start_pick(self):self.picking=True;self.clear_gizmo();self.status.setText(t('Left-click a surface to add a camera pointing along its normal. Adjust its pose or flip its axis afterward.'))
  def picked(self,point,picker):
   if not self.picking:return
   try:
@@ -269,7 +277,6 @@ class MainWindow(W.QMainWindow):
   self.job_revision=self.revision;self.preview_button.setEnabled(False);self.eval_button.setEnabled(False);self.status.setText(t('Preparing ray scene...'));self.worker=ComputeWorker(self.objects,self.cameras,int(self.res.currentText()),int(self.samples.currentText()),area);self.worker.done.connect(self.computed);self.worker.failed.connect(self.compute_failed);self.worker.progress.connect(self.status.setText);self.worker.finished.connect(self.job_finished);self.worker.start()
  def job_finished(self):
   self.preview_button.setEnabled(True);self.eval_button.setEnabled(True)
-  if self.live_pending:self.live_timer.start()
  def compute_failed(self,msg):self.status.setText(t('Computation failed'));self.error(msg)
  def image_widget(self,array):
   h,w=array.shape[:2];q=G.QImage(np.ascontiguousarray(array).data,w,h,w*3,G.QImage.Format.Format_RGB888).copy();label=W.QLabel();label.setPixmap(G.QPixmap.fromImage(q));label.setAlignment(C.Qt.AlignmentFlag.AlignCenter);scroll=W.QScrollArea();scroll.setWidget(label);scroll.setWidgetResizable(True);return scroll
@@ -344,11 +351,8 @@ class MainWindow(W.QMainWindow):
   self.image_tabs.addTab(self.image_widget(image),t('Reference photo'));dlg=RoiDialog(image,self)
   if dlg.exec()==W.QDialog.DialogCode.Accepted:self.cameras[i].image_mask=dlg.mask();self.changed();self.status.setText(t('Region applied. Align the photo and 3D scene, then evaluate again.'))
  def closeEvent(self,event):
-  self.live_preview.setChecked(False);self.live_timer.stop()
   if self.worker and self.worker.isRunning():self.worker.requestInterruption();self.status.setText(t('Computation is stopping; close again when finished.'));event.ignore();return
-  self.viewer.close();event.accept()
+  self.clear_gizmo();self.viewer.close();event.accept()
 
 if __name__=='__main__':
- app=W.QApplication(sys.argv);app.setStyle('Fusion');launch=LaunchDialog()
- if launch.exec()!=W.QDialog.DialogCode.Accepted:sys.exit(0)
- w=MainWindow();w.res.setCurrentText('160' if launch.live.isChecked() else '320');w.show();w.live_preview.setChecked(launch.live.isChecked());sys.exit(app.exec())
+ app=W.QApplication(sys.argv);app.setStyle('Fusion');w=MainWindow();w.show();sys.exit(app.exec())

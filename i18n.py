@@ -3,6 +3,9 @@ from PySide6 import QtWidgets as W
 
 LANGUAGE = 'en'
 ZH = {
+ 'Interaction':'交互','Object interaction':'物体移动与旋转',
+ 'Roll (X)':'Roll 横滚 (X)','Pitch (Y)':'Pitch 俯仰 (Y)','Yaw (Z)':'Yaw 偏航 (Z)',
+ 'Click a model to select it. Drag colored arrows to move; drag arcs to rotate. Red: X / Roll, green: Y / Pitch, blue: Z / Yaw. Use the arrow buttons for precise steps. Images and evaluation update only when you press their buttons.':'点击模型进行选择，拖动彩色箭头移动，拖动圆弧旋转。红色：X / Roll，绿色：Y / Pitch，蓝色：Z / Yaw。可用箭头按钮按设定步长精调。出图和评估仅由对应按钮触发。',
  'Metric / Camera pair':'指标 / 相机对','Rate':'比例','Area mm2':'面积 mm²','Joint extent mm':'联合范围 mm',
  'All cameras - undistorted views':'全部相机 - 去畸变画面','All cameras':'全部相机',
  'Waiting for preview':'等待预览','Camera disabled':'相机已禁用',

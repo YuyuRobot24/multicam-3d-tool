@@ -4,7 +4,7 @@ A local Python desktop simulator for calibrated multi-camera images, visible sur
 
 ## Windows quick start
 
-Python 3.12 and a desktop with working OpenGL are required. On the configured workstation, double-click `start_windows.bat`. It uses the isolated project environment `.conda-env` created with Anaconda. The startup dialog lets you choose the interface language and enable live preview.
+Python 3.12 and a desktop with working OpenGL are required. On the configured workstation, double-click `start_windows.bat`. It uses the isolated project environment `.conda-env` created with Anaconda and opens the main window directly.
 
 For a fresh checkout with Anaconda:
 
@@ -17,32 +17,23 @@ python app.py
 
 Alternatively, install Python 3.12 with the Python Launcher and double-click `start_windows.bat`; it creates `.venv` and installs dependencies on first run. If installation is interrupted, rerun `python -m pip install -r requirements.txt` in that environment.
 
-## Language and live preview
+## Language, camera images and evaluation
 
 The default four-camera layout is shown in a 2×2 overview, so all cameras can be compared at once. Other layouts display their available cameras in the same grid. Displayed and exported simulated images are undistorted pinhole views using the original focal length; unsupported borders remain black. Depth, target masks and object IDs use the same corrected pixel coordinates. Exports include the corrected display calibration. Original calibration and photo-region masks remain unchanged for geometric visibility evaluation.
 
 The evaluation panel reports **joint coverage**, not separate camera footprints: union area / target area, union width × height on a single test board, multi-camera overlap area / union area, blind area, and every camera pair's IoU (intersection / union). Undefined overlap for two empty views is shown as a dash. Width × height is a sampled bounding extent, not filled area; general curved targets use world-coordinate bounds in the log. Exported `camera_overlap.csv` and `combined_coverage.json` contain these joint metrics.
 
-English is the default at each launch. Select **English / 中文** from the dropdown on the startup dialog or main window. Switching languages preserves the current scene, poses, calibration and results.
+English is the default at each launch. Select **English / 中文** from the main-window dropdown. Switching languages preserves the current scene, poses, calibration and results.
 
-Enable **Live camera preview** to automatically update ray images after scene changes. Changes are debounced and computed on a background thread. Only one computation runs at a time; outdated results are discarded and the latest scene is refreshed afterward. Rendering speed depends on scene complexity and image resolution; this is not a fixed video frame rate. Live mode starts at 160 px for responsiveness. Increase **Image width px** for detail. Coverage evaluation remains an explicit action.
+Press **Update images** to render camera images or **Evaluate coverage** to render images and calculate joint metrics. Computation runs on a background thread. Scene edits invalidate previous results and exports; an in-flight outdated result is discarded. Further computation requires another button press. Set **Image width px** for image detail.
 
-## Keyboard model controls
+## Mouse model controls
 
-Select a model in **Scene / Test board**, enable **Keyboard model control**, then click the 3D viewport. Shortcuts apply only inside that viewport, so editing numeric fields does not move models.
+Click a model in the 3D viewport to select it and open the **Interaction** tab. Selection shows a colored transform manipulator on the model. Drag a straight arrow to translate along its world axis; drag a curved arc to rotate about that axis around the model center. Red represents X / Roll, green Y / Pitch, and blue Z / Yaw.
 
-| Action | Keys | Axis / Direction |
-| --- | --- | --- |
-| Translate | W / S | +X / -X |
-| Translate | A / D | -Y / +Y |
-| Translate | Q / E | -Z / +Z |
-| Rotate | I / K | +X / -X |
-| Rotate | J / L | +Y / -Y |
-| Rotate | U / O | +Z / -Z |
-| Faster steps | Hold Shift | 5× configured step |
-| Fit scene | F | Reset navigation view |
+The **Interaction** tab also provides negative/positive arrow buttons for X, Y, Z, Roll, Pitch and Yaw. Set **Move step mm** and **Rotate step deg** for precise increments. Numeric pose fields show XYZ position and XYZ Euler angles as Roll/Pitch/Yaw; rotations use the existing right-handed extrinsic XYZ convention. Manipulator changes are committed to the scene when the mouse is released and are saved in `.mcv` projects.
 
-Set **Move step mm** and **Rotate step deg** to control precision. Rotation adjusts the model's XYZ Euler angles. Cameras are independent objects and do not follow a moved housing automatically. Mouse drag and wheel retain the normal orbit/zoom controls.
+Cameras are independent objects and do not follow a moved housing automatically. Mouse drag away from the handles and the wheel retain orbit/zoom navigation. Use **Fit scene** to reset the navigation view. To place a camera, press **Place on surface** and click a model surface.
 
 ## Workflow
 
@@ -50,7 +41,7 @@ Set **Move step mm** and **Rotate step deg** to control precision. Rotation adju
 2. Assign roles: `housing` and `occluder` block rays; `target` also contributes to measured area. Disable objects to exclude them from display and computation.
 3. Set model scale and pose. Position cameras using surface picking and pose fields; import JSON, YAML, OpenCV YAML/XML or Markdown calibration.
 4. Create a test board or import a scaled target. Align real photos and the scene before using observed-region masks.
-5. Use live preview or **Update images**. Choose **Evaluate coverage** for sampled visible area, overlap and blind surface.
+5. Press **Update images**. Choose **Evaluate coverage** for sampled visible area, overlap and blind surface.
 6. Save a self-contained `.mcv` project or export images, masks, ray distances, metrics and coverage point clouds.
 
 Images are simplified geometric simulations. Area is estimated by surface sampling, includes all target surfaces (including backs), and does not measure reconstruction accuracy. Increase sampling to assess convergence. Imported mesh units must be checked against known physical dimensions. The camera convention is +Z forward, +X right, +Y down.
@@ -61,7 +52,7 @@ Images are simplified geometric simulations. Area is estimated by surface sampli
 python -m unittest discover -s tests -v
 ```
 
-Tests include core geometry, keyboard manipulation, runtime language switching, live preview and stale-result rejection. GUI tests need a desktop/OpenGL session. Linux startup is available through `bash start_linux.sh`.
+Tests include core geometry, mouse picking and transforms, precision buttons, runtime language switching, manual preview and stale-result rejection. GUI tests need a desktop/OpenGL session. Linux startup is available through `bash start_linux.sh`.
 
 The project environment, caches and local secrets are excluded from Git. No system-wide Python or PATH change is required. The Windows application uses native VTK diagnostic output to avoid recursive PyVista log callbacks during window events.
 
